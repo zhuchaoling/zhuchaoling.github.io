@@ -1,0 +1,371 @@
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      *::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <script nonce="">
+      window.onerror = function (e) {
+        window.parent.postMessage(
+          {
+            type: "error",
+            error: e,
+          },
+          "*"
+        );
+      };
+      window.alert = (s) => console.log(s);
+      window.confirm = (s) => console.log(s);
+    </script>
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #b6c79c;
+            font-family: monospace;
+            position: relative;
+            overflow: hidden;
+          }
+
+          body > * {
+            z-index: 2;
+            position: relative;
+          }
+          .game-container {
+            text-align: center;
+            padding: 10px;
+            max-width: 100%;
+          }
+          canvas {
+            border: 2px dashed #555555;
+            background-color: #b6c79c;
+            image-rendering: pixelated;
+            max-width: 100%;
+          }
+          .title {
+            color: #3b3b3b;
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-family: monospace;
+          }
+          .score {
+            color: #3b3b3b;
+            font-size: 16px;
+            font-weight: 400;
+            margin-bottom: 30px;
+            font-family: monospace;
+            white-space: nowrap;
+          }
+          .controls {
+            color: #3b3b3b;
+            margin-top: 15px;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="game-container">
+          <div class="title">贪吃蛇</div>
+          <div class="score">得分:<span id="scoreValue"> 0</span></div>
+          <canvas id="gameCanvas" width="400" height="400"></canvas>
+          <div class="controls" id="controls" style="color: red">
+            使用方向键控制移动<br />按空格键或点击 开始/暂停游戏
+          </div>
+        </div>
+
+        <script nonce="">
+          const canvas = document.getElementById("gameCanvas");
+          const ctx = canvas.getContext("2d");
+          const scoreElement = document.getElementById("scoreValue");
+          const gridSize = 16;
+          const tileCount = canvas.width / gridSize;
+
+          let snake = [{ x: 10, y: 10 }];
+          let food = { x: 5, y: 5 };
+          let dx = 1;
+          let dy = 0;
+          let score = 0;
+          let gameSpeed = 150;
+          let lastTime = 0;
+          let gameStarted = false;
+          let gamePaused = false;
+
+          function updateScore(newScore) {
+            score = newScore;
+            scoreElement.textContent = score.toString();
+          }
+
+          document.getElementById("controls").onclick = function () {
+            if (!gameStarted) {
+              gameStarted = true;
+              gameLoop();
+            } else {
+              gamePaused = !gamePaused;
+              if (!gamePaused) {
+                gameLoop();
+              }
+            }
+          };
+          document.addEventListener("keydown", (e) => {
+            if (e.code === "Space") {
+              if (!gameStarted) {
+                gameStarted = true;
+                gameLoop();
+              } else {
+                gamePaused = !gamePaused;
+                if (!gamePaused) {
+                  gameLoop();
+                }
+              }
+              e.preventDefault();
+            }
+
+            if (gameStarted && !gamePaused) {
+              switch (e.key) {
+                case "ArrowUp":
+                  if (dy === 0) {
+                    dx = 0;
+                    dy = -1;
+                  }
+                  break;
+                case "ArrowDown":
+                  if (dy === 0) {
+                    dx = 0;
+                    dy = 1;
+                  }
+                  break;
+                case "ArrowLeft":
+                  if (dx === 0) {
+                    dx = -1;
+                    dy = 0;
+                  }
+                  break;
+                case "ArrowRight":
+                  if (dx === 0) {
+                    dx = 1;
+                    dy = 0;
+                  }
+                  break;
+              }
+            }
+          });
+
+          if (/Mobi|Android/i.test(navigator.userAgent)) {
+            document.body.addEventListener("touchstart", handleTouchStart);
+            document.body.addEventListener("touchend", handleTouchEnd);
+          }
+
+          var touchStartX = 0;
+          var touchEndY = 0;
+          function handleTouchStart(event) {
+            const touch = event.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+          }
+          function handleTouchEnd(event) {
+            const touch = event.changedTouches[0];
+            touchEndX = touch.clientX;
+            touchEndY = touch.clientY;
+
+            handleSwipe();
+          }
+
+          let direction = "right";
+          function handleSwipe() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+              // Horizontal swipe
+              if (deltaX > 0) {
+                // Swipe right
+                if (direction !== "LEFT") {
+                  direction = "RIGHT";
+                  if (dx === 0) {
+                    dx = 1;
+                    dy = 0;
+                  }
+                }
+              } else {
+                // Swipe left
+                if (direction !== "RIGHT") {
+                  direction = "LEFT";
+                  if (dx === 0) {
+                    dx = -1;
+                    dy = 0;
+                  }
+                }
+              }
+            } else {
+              // Vertical swipe
+              if (deltaY > 0) {
+                // Swipe down
+                if (direction !== "UP") {
+                  direction = "DOWN";
+                  if (dy === 0) {
+                    dx = 0;
+                    dy = 1;
+                  }
+                }
+              } else {
+                // Swipe up
+                if (direction !== "DOWN") {
+                  direction = "UP";
+                  if (dy === 0) {
+                    dx = 0;
+                    dy = -1;
+                  }
+                }
+              }
+            }
+          }
+
+          function drawPixel(x, y) {
+            ctx.fillStyle = "#202020";
+            ctx.fillRect(
+              x * gridSize,
+              y * gridSize,
+              gridSize - 1,
+              gridSize - 1
+            );
+          }
+
+          function updateFood() {
+            food = {
+              x: Math.floor(Math.random() * tileCount),
+              y: Math.floor(Math.random() * tileCount),
+            };
+            for (let part of snake) {
+              if (part.x === food.x && part.y === food.y) {
+                updateFood();
+                break;
+              }
+            }
+          }
+
+          function drawStartScreen() {
+            ctx.fillStyle = "#3B3B3B";
+            ctx.font = "300 20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(
+              "按空格键开始游戏",
+              canvas.width / 2,
+              canvas.height / 2
+            );
+          }
+
+          function drawPauseScreen() {
+            ctx.fillStyle = "#3B3B3B";
+            ctx.font = "300 20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("游戏暂停", canvas.width / 2, canvas.height / 2);
+          }
+
+          function gameLoop(currentTime) {
+            if (!gameStarted) {
+              drawStartScreen();
+              return;
+            }
+
+            if (gamePaused) {
+              drawPauseScreen();
+              requestAnimationFrame(gameLoop);
+              return;
+            }
+
+            if (currentTime - lastTime >= gameSpeed) {
+              lastTime = currentTime;
+
+              const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+              if (
+                head.x < 0 ||
+                head.x >= tileCount ||
+                head.y < 0 ||
+                head.y >= tileCount
+              ) {
+                resetGame();
+                return;
+              }
+
+              for (let i = 0; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                  resetGame();
+                  return;
+                }
+              }
+
+              snake.unshift(head);
+
+              if (head.x === food.x && head.y === food.y) {
+                updateScore(score + 10);
+                updateFood();
+                if (gameSpeed > 50) {
+                  gameSpeed -= 2;
+                }
+              } else {
+                snake.pop();
+              }
+            }
+
+            ctx.fillStyle = "#B6C79C";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "#DCE7D4";
+            ctx.lineWidth = 0.25;
+            for (let i = 0; i < tileCount; i++) {
+              for (let j = 0; j < tileCount; j++) {
+                ctx.strokeRect(i * gridSize, j * gridSize, gridSize, gridSize);
+              }
+            }
+
+            drawPixel(food.x, food.y);
+
+            snake.forEach((part) => {
+              drawPixel(part.x, part.y);
+            });
+
+            requestAnimationFrame(gameLoop);
+          }
+
+          function resetGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空 Canvas
+            snake = [{ x: 10, y: 10 }];
+            food = { x: 5, y: 5 };
+            dx = 1;
+            dy = 0;
+            updateScore(0);
+            gameSpeed = 150;
+            gameStarted = false;
+            gamePaused = false;
+            drawStartScreen();
+          }
+
+          drawStartScreen();
+        </script>
+      </body>
+    </html>
+  </body>
+</html>
