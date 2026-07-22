@@ -1,371 +1,530 @@
-<html lang="zh">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
-    <style>
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      * {
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-      }
-      *::-webkit-scrollbar {
-        display: none;
-      }
-    </style>
-  </head>
-  <body>
-    <script nonce="">
-      window.onerror = function (e) {
-        window.parent.postMessage(
-          {
-            type: "error",
-            error: e,
-          },
-          "*"
-        );
-      };
-      window.alert = (s) => console.log(s);
-      window.confirm = (s) => console.log(s);
-    </script>
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #b6c79c;
-            font-family: monospace;
-            position: relative;
-            overflow: hidden;
-          }
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>贪吃蛇</title>
+  <!-- 引入 Vue 2 -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    *::-webkit-scrollbar {
+      display: none;
+    }
 
-          body > * {
-            z-index: 2;
-            position: relative;
-          }
-          .game-container {
-            text-align: center;
-            padding: 10px;
-            max-width: 100%;
-          }
-          canvas {
-            border: 2px dashed #555555;
-            background-color: #b6c79c;
-            image-rendering: pixelated;
-            max-width: 100%;
-          }
-          .title {
-            color: #3b3b3b;
-            font-size: 32px;
-            font-weight: 600;
-            margin-bottom: 5px;
-            font-family: monospace;
-          }
-          .score {
-            color: #3b3b3b;
-            font-size: 16px;
-            font-weight: 400;
-            margin-bottom: 30px;
-            font-family: monospace;
-            white-space: nowrap;
-          }
-          .controls {
-            color: #3b3b3b;
-            margin-top: 15px;
-            font-size: 14px;
-            line-height: 1.5;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="game-container">
-          <div class="title">贪吃蛇</div>
-          <div class="score">得分:<span id="scoreValue"> 0</span></div>
-          <canvas id="gameCanvas" width="400" height="400"></canvas>
-          <div class="controls" id="controls" style="color: red">
-            使用方向键控制移动<br />按空格键或点击 开始/暂停游戏
-          </div>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #b6c79c;
+      font-family: 'Courier New', Courier, monospace;
+      user-select: none;
+    }
+
+    .game-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #b6c79c;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .title {
+      color: #2d3748;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+
+    .dashboard {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 400px;
+      margin-bottom: 12px;
+      font-weight: bold;
+      font-size: 16px;
+      color: #2d3748;
+    }
+
+    /* 得分增加时的跳动动画 */
+    .score-text {
+      display: inline-block;
+      transition: transform 0.15s ease;
+    }
+    .score-text.bump {
+      transform: scale(1.4);
+      color: #d97706;
+    }
+
+    .speed-tag {
+      padding: 4px 8px;
+      border-radius: 4px;
+      background-color: rgba(255, 255, 255, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .speed-tag.accelerated {
+      color: #e53e3e;
+      background-color: #ffeb3b;
+      transform: scale(1.05);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      width: 400px;
+      height: 400px;
+    }
+
+    /* 画布得分震动动画 */
+    canvas {
+      border: 3px dashed #3b3b3b;
+      background-color: #b6c79c;
+      image-rendering: pixelated;
+      transition: transform 0.05s ease;
+    }
+    canvas.shake {
+      animation: shakeAnim 0.2s ease-in-out;
+    }
+
+    @keyframes shakeAnim {
+      0% { transform: translate(0, 0); }
+      25% { transform: translate(-4px, 3px); }
+      50% { transform: translate(4px, -3px); }
+      75% { transform: translate(-2px, -2px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .overlay-text {
+      text-align: center;
+      font-size: 16px;
+      background: rgba(0, 0, 0, 0.75);
+      padding: 16px 24px;
+      border-radius: 8px;
+      line-height: 1.6;
+    }
+
+    kbd {
+      background-color: #e2e8f0;
+      color: #2d3748;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .controls-guide {
+      margin-top: 16px;
+      text-align: center;
+      color: #2d3748;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .theme-selector {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #2d3748;
+    }
+
+    .theme-selector select {
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <div class="game-container">
+    <div class="title">贪吃蛇 (Vue2 炫彩特效版)</div>
+
+    <div class="dashboard">
+      <div>得分: <span class="score-text" :class="{ bump: isScoreBump }">{{ score }}</span></div>
+      <div class="speed-tag" :class="{ accelerated: isBoosted }">
+        {{ isBoosted ? '⚡ 2倍速运行中' : '🐢 标准速度' }}
+      </div>
+    </div>
+
+    <div class="canvas-wrapper">
+      <canvas ref="gameCanvas" width="400" height="400" :class="{ shake: isShaking }"></canvas>
+
+      <!-- 开始 / 暂停 遮罩 -->
+      <div v-if="!gameStarted || gamePaused" class="overlay" @click="togglePlay">
+        <div class="overlay-text">
+          <p v-if="!gameStarted">按 <kbd>Space</kbd> 或点击开始游戏</p>
+          <p v-else-if="gamePaused">游戏暂停<br/>按 <kbd>Space</kbd> 或点击继续</p>
         </div>
+      </div>
+    </div>
 
-        <script nonce="">
-          const canvas = document.getElementById("gameCanvas");
-          const ctx = canvas.getContext("2d");
-          const scoreElement = document.getElementById("scoreValue");
-          const gridSize = 16;
-          const tileCount = canvas.width / gridSize;
+    <!-- 换头/尾表情选择器 -->
+    <div class="theme-selector">
+      蛇头:
+      <select v-model="headEmoji">
+        <option value="🐱">🐱 猫头</option>
+        <option value="🐶">🐶 狗头</option>
+        <option value="😄">😄 笑脸</option>
+        <option value="🐲">🐲 龙头</option>
+      </select>
+      &nbsp;蛇尾:
+      <select v-model="tailEmoji">
+        <option value="🐾">🐾 脚印</option>
+        <option value="🔥">🔥 火焰</option>
+        <option value="⭐">⭐ 星星</option>
+        <option value="🍃">🍃 树叶</option>
+      </select>
+    </div>
 
-          let snake = [{ x: 10, y: 10 }];
-          let food = { x: 5, y: 5 };
-          let dx = 1;
-          let dy = 0;
-          let score = 0;
-          let gameSpeed = 150;
-          let lastTime = 0;
-          let gameStarted = false;
-          let gamePaused = false;
+    <div class="controls-guide">
+      <p>🎮 <b>方向键</b> 移动 | <b>长按方向键</b> 触发 2 倍速加速</p>
+      <p>🎉 每次获得 10 分触发粒子爆破与击打震动效果！</p>
+    </div>
+  </div>
+</div>
 
-          function updateScore(newScore) {
-            score = newScore;
-            scoreElement.textContent = score.toString();
+<script>
+  new Vue({
+    el: '#app',
+    data() {
+      return {
+        gridSize: 16,
+        tileCount: 25,
+        snake: [{ x: 10, y: 10 }],
+        food: { x: 5, y: 5 },
+        dx: 1,
+        dy: 0,
+        score: 0,
+        baseSpeed: 140,
+        isBoosted: false,
+        gameStarted: false,
+        gamePaused: false,
+        timer: null,
+
+        // 默认标记表情
+        headEmoji: '🐱',
+        tailEmoji: '🐾',
+
+        // 特效相关状态
+        particles: [],       // 爆炸粒子数组
+        floatingTexts: [],   // 飘浮文字数组
+        isShaking: false,    // Canvas 屏幕震动
+        isScoreBump: false   // 得分跳动
+      }
+    },
+    computed: {
+      currentSpeed() {
+        const speed = Math.max(50, this.baseSpeed - Math.floor(this.score / 20) * 4);
+        return this.isBoosted ? speed / 2 : speed;
+      }
+    },
+    watch: {
+      headEmoji() { this.drawScene(); },
+      tailEmoji() { this.drawScene(); }
+    },
+    mounted() {
+      this.ctx = this.$refs.gameCanvas.getContext('2d');
+      window.addEventListener('keydown', this.handleKeyDown);
+      window.addEventListener('keyup', this.handleKeyUp);
+      this.drawScene();
+    },
+    beforeDestroy() {
+      window.removeEventListener('keydown', this.handleKeyDown);
+      window.removeEventListener('keyup', this.handleKeyUp);
+      clearTimeout(this.timer);
+    },
+    methods: {
+      togglePlay() {
+        if (!this.gameStarted) {
+          this.resetGame();
+          this.gameStarted = true;
+          this.gamePaused = false;
+          this.runLoop();
+        } else {
+          this.gamePaused = !this.gamePaused;
+          if (!this.gamePaused) {
+            this.runLoop();
           }
+        }
+      },
 
-          document.getElementById("controls").onclick = function () {
-            if (!gameStarted) {
-              gameStarted = true;
-              gameLoop();
-            } else {
-              gamePaused = !gamePaused;
-              if (!gamePaused) {
-                gameLoop();
-              }
-            }
-          };
-          document.addEventListener("keydown", (e) => {
-            if (e.code === "Space") {
-              if (!gameStarted) {
-                gameStarted = true;
-                gameLoop();
-              } else {
-                gamePaused = !gamePaused;
-                if (!gamePaused) {
-                  gameLoop();
-                }
-              }
-              e.preventDefault();
-            }
+      handleKeyDown(e) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          this.togglePlay();
+          return;
+        }
 
-            if (gameStarted && !gamePaused) {
-              switch (e.key) {
-                case "ArrowUp":
-                  if (dy === 0) {
-                    dx = 0;
-                    dy = -1;
-                  }
-                  break;
-                case "ArrowDown":
-                  if (dy === 0) {
-                    dx = 0;
-                    dy = 1;
-                  }
-                  break;
-                case "ArrowLeft":
-                  if (dx === 0) {
-                    dx = -1;
-                    dy = 0;
-                  }
-                  break;
-                case "ArrowRight":
-                  if (dx === 0) {
-                    dx = 1;
-                    dy = 0;
-                  }
-                  break;
-              }
-            }
+        if (!this.gameStarted || this.gamePaused) return;
+
+        const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        if (keys.includes(e.key)) {
+          e.preventDefault();
+
+          if (e.key === 'ArrowUp' && this.dy === 0) { this.dx = 0; this.dy = -1; }
+          else if (e.key === 'ArrowDown' && this.dy === 0) { this.dx = 0; this.dy = 1; }
+          else if (e.key === 'ArrowLeft' && this.dx === 0) { this.dx = -1; this.dy = 0; }
+          else if (e.key === 'ArrowRight' && this.dx === 0) { this.dx = 1; this.dy = 0; }
+
+          this.isBoosted = true;
+        }
+      },
+
+      handleKeyUp(e) {
+        const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        if (keys.includes(e.key)) {
+          this.isBoosted = false;
+        }
+      },
+
+      runLoop() {
+        if (!this.gameStarted || this.gamePaused) return;
+
+        this.updateState();
+        this.drawScene();
+
+        this.timer = setTimeout(() => {
+          this.runLoop();
+        }, this.currentSpeed);
+      },
+
+      updateState() {
+        const head = { x: this.snake[0].x + this.dx, y: this.snake[0].y + this.dy };
+
+        // 撞墙检测
+        if (head.x < 0 || head.x >= this.tileCount || head.y < 0 || head.y >= this.tileCount) {
+          this.gameOver();
+          return;
+        }
+
+        // 撞自己检测
+        for (let i = 0; i < this.snake.length; i++) {
+          if (head.x === this.snake[i].x && head.y === this.snake[i].y) {
+            this.gameOver();
+            return;
+          }
+        }
+
+        this.snake.unshift(head);
+
+        // 吃到食物（得分加 10）
+        if (head.x === this.food.x && head.y === this.food.y) {
+          this.score += 10;
+
+          // 触发全套开心特效！
+          this.triggerCelebrationEffects(head.x, head.y);
+
+          this.generateFood();
+        } else {
+          this.snake.pop();
+        }
+
+        // 更新粒子与浮动文字的物理状态
+        this.updateParticles();
+        this.updateFloatingTexts();
+      },
+
+      // 触发全套庆祝特效
+      triggerCelebrationEffects(gridX, gridY) {
+        const pixelX = (gridX + 0.5) * this.gridSize;
+        const pixelY = (gridY + 0.5) * this.gridSize;
+
+        // 1. 生成 15~20 个彩色爆炸粒子
+        const colors = ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+        for (let i = 0; i < 18; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 4 + 2;
+          this.particles.push({
+            x: pixelX,
+            y: pixelY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: Math.random() * 3 + 2,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            alpha: 1.0,
+            decay: Math.random() * 0.04 + 0.03
           });
+        }
 
-          if (/Mobi|Android/i.test(navigator.userAgent)) {
-            document.body.addEventListener("touchstart", handleTouchStart);
-            document.body.addEventListener("touchend", handleTouchEnd);
+        // 2. 生成飘浮 "+10!" 文字
+        this.floatingTexts.push({
+          x: pixelX,
+          y: pixelY,
+          text: '+10!',
+          alpha: 1.0,
+          scale: 1.5
+        });
+
+        // 3. 屏幕震动效果
+        this.isShaking = true;
+        setTimeout(() => { this.isShaking = false; }, 200);
+
+        // 4. 得分栏跳动
+        this.isScoreBump = true;
+        setTimeout(() => { this.isScoreBump = false; }, 200);
+      },
+
+      // 更新粒子位置与透明度
+      updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.alpha -= p.decay;
+          if (p.alpha <= 0) {
+            this.particles.splice(i, 1);
           }
+        }
+      },
 
-          var touchStartX = 0;
-          var touchEndY = 0;
-          function handleTouchStart(event) {
-            const touch = event.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
+      // 更新飘浮文字
+      updateFloatingTexts() {
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+          const ft = this.floatingTexts[i];
+          ft.y -= 1.2; // 向上飘
+          ft.alpha -= 0.04; // 渐渐淡出
+          if (ft.scale > 1.0) ft.scale -= 0.05; // 缩小归位
+          if (ft.alpha <= 0) {
+            this.floatingTexts.splice(i, 1);
           }
-          function handleTouchEnd(event) {
-            const touch = event.changedTouches[0];
-            touchEndX = touch.clientX;
-            touchEndY = touch.clientY;
+        }
+      },
 
-            handleSwipe();
+      generateFood() {
+        let newFood;
+        while (true) {
+          newFood = {
+            x: Math.floor(Math.random() * this.tileCount),
+            y: Math.floor(Math.random() * this.tileCount)
+          };
+          const collision = this.snake.some(p => p.x === newFood.x && p.y === newFood.y);
+          if (!collision) break;
+        }
+        this.food = newFood;
+      },
+
+      gameOver() {
+        this.gameStarted = false;
+        this.gamePaused = false;
+        clearTimeout(this.timer);
+        alert(`💥 游戏结束！最终得分：${this.score}`);
+      },
+
+      resetGame() {
+        this.snake = [{ x: 10, y: 10 }];
+        this.dx = 1;
+        this.dy = 0;
+        this.score = 0;
+        this.isBoosted = false;
+        this.particles = [];
+        this.floatingTexts = [];
+        this.generateFood();
+      },
+
+      drawScene() {
+        const { ctx, gridSize, tileCount } = this;
+
+        // 清屏与绘制网格
+        ctx.fillStyle = '#b6c79c';
+        ctx.fillRect(0, 0, 400, 400);
+
+        ctx.strokeStyle = '#a2b388';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < tileCount; i++) {
+          for (let j = 0; j < tileCount; j++) {
+            ctx.strokeRect(i * gridSize, j * gridSize, gridSize, gridSize);
           }
+        }
 
-          let direction = "right";
-          function handleSwipe() {
-            const deltaX = touchEndX - touchStartX;
-            const deltaY = touchEndY - touchStartY;
+        // 绘制食物
+        this.drawEmoji(this.food.x * gridSize, this.food.y * gridSize, '🍎', 0);
 
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-              // Horizontal swipe
-              if (deltaX > 0) {
-                // Swipe right
-                if (direction !== "LEFT") {
-                  direction = "RIGHT";
-                  if (dx === 0) {
-                    dx = 1;
-                    dy = 0;
-                  }
-                }
-              } else {
-                // Swipe left
-                if (direction !== "RIGHT") {
-                  direction = "LEFT";
-                  if (dx === 0) {
-                    dx = -1;
-                    dy = 0;
-                  }
-                }
-              }
-            } else {
-              // Vertical swipe
-              if (deltaY > 0) {
-                // Swipe down
-                if (direction !== "UP") {
-                  direction = "DOWN";
-                  if (dy === 0) {
-                    dx = 0;
-                    dy = 1;
-                  }
-                }
-              } else {
-                // Swipe up
-                if (direction !== "DOWN") {
-                  direction = "UP";
-                  if (dy === 0) {
-                    dx = 0;
-                    dy = -1;
-                  }
-                }
-              }
-            }
+        // 绘制蛇
+        this.snake.forEach((part, index) => {
+          const x = part.x * gridSize;
+          const y = part.y * gridSize;
+
+          if (index === 0) {
+            const angle = Math.atan2(this.dy, this.dx);
+            this.drawEmoji(x, y, this.headEmoji, angle);
+          } else if (index === this.snake.length - 1 && this.snake.length > 1) {
+            const prev = this.snake[index - 1];
+            const angle = Math.atan2(prev.y - part.y, prev.x - part.x);
+            this.drawEmoji(x, y, this.tailEmoji, angle);
+          } else {
+            ctx.fillStyle = '#2d3748';
+            ctx.fillRect(x + 1, y + 1, gridSize - 2, gridSize - 2);
           }
+        });
 
-          function drawPixel(x, y) {
-            ctx.fillStyle = "#202020";
-            ctx.fillRect(
-              x * gridSize,
-              y * gridSize,
-              gridSize - 1,
-              gridSize - 1
-            );
-          }
+        // 绘制爆炸粒子
+        this.particles.forEach(p => {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.alpha);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
 
-          function updateFood() {
-            food = {
-              x: Math.floor(Math.random() * tileCount),
-              y: Math.floor(Math.random() * tileCount),
-            };
-            for (let part of snake) {
-              if (part.x === food.x && part.y === food.y) {
-                updateFood();
-                break;
-              }
-            }
-          }
+        // 绘制飘浮加分文字
+        this.floatingTexts.forEach(ft => {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, ft.alpha);
+          ctx.fillStyle = '#d97706';
+          ctx.font = `bold ${Math.floor(16 * ft.scale)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(ft.text, ft.x, ft.y);
+          ctx.restore();
+        });
+      },
 
-          function drawStartScreen() {
-            ctx.fillStyle = "#3B3B3B";
-            ctx.font = "300 20px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(
-              "按空格键开始游戏",
-              canvas.width / 2,
-              canvas.height / 2
-            );
-          }
+      drawEmoji(x, y, emoji, angle) {
+        const { ctx, gridSize } = this;
+        const centerX = x + gridSize / 2;
+        const centerY = y + gridSize / 2;
 
-          function drawPauseScreen() {
-            ctx.fillStyle = "#3B3B3B";
-            ctx.font = "300 20px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText("游戏暂停", canvas.width / 2, canvas.height / 2);
-          }
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
 
-          function gameLoop(currentTime) {
-            if (!gameStarted) {
-              drawStartScreen();
-              return;
-            }
+        ctx.font = `${gridSize - 1}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, 0, 0);
 
-            if (gamePaused) {
-              drawPauseScreen();
-              requestAnimationFrame(gameLoop);
-              return;
-            }
+        ctx.restore();
+      }
+    }
+  });
+</script>
 
-            if (currentTime - lastTime >= gameSpeed) {
-              lastTime = currentTime;
-
-              const head = { x: snake[0].x + dx, y: snake[0].y + dy };
-
-              if (
-                head.x < 0 ||
-                head.x >= tileCount ||
-                head.y < 0 ||
-                head.y >= tileCount
-              ) {
-                resetGame();
-                return;
-              }
-
-              for (let i = 0; i < snake.length; i++) {
-                if (head.x === snake[i].x && head.y === snake[i].y) {
-                  resetGame();
-                  return;
-                }
-              }
-
-              snake.unshift(head);
-
-              if (head.x === food.x && head.y === food.y) {
-                updateScore(score + 10);
-                updateFood();
-                if (gameSpeed > 50) {
-                  gameSpeed -= 2;
-                }
-              } else {
-                snake.pop();
-              }
-            }
-
-            ctx.fillStyle = "#B6C79C";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = "#DCE7D4";
-            ctx.lineWidth = 0.25;
-            for (let i = 0; i < tileCount; i++) {
-              for (let j = 0; j < tileCount; j++) {
-                ctx.strokeRect(i * gridSize, j * gridSize, gridSize, gridSize);
-              }
-            }
-
-            drawPixel(food.x, food.y);
-
-            snake.forEach((part) => {
-              drawPixel(part.x, part.y);
-            });
-
-            requestAnimationFrame(gameLoop);
-          }
-
-          function resetGame() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空 Canvas
-            snake = [{ x: 10, y: 10 }];
-            food = { x: 5, y: 5 };
-            dx = 1;
-            dy = 0;
-            updateScore(0);
-            gameSpeed = 150;
-            gameStarted = false;
-            gamePaused = false;
-            drawStartScreen();
-          }
-
-          drawStartScreen();
-        </script>
-      </body>
-    </html>
-  </body>
+</body>
 </html>
