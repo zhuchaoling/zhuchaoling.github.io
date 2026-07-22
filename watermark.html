@@ -1,0 +1,236 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片添加水印工具</title>
+  <!-- 引入 Vue 2 -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+  <!-- 引入 Element UI 样式和组件 -->
+  <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+  <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: #f0f2f5;
+      font-family: Helvetica Neue, Helvetica, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Arial, sans-serif;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .preview-area {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 400px;
+      background: #f8f9fa;
+      border: 2px dashed #dcdfe6;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .preview-area img {
+      max-width: 100%;
+      max-height: 600px;
+      object-fit: contain;
+    }
+    .empty-text {
+      color: #909399;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <el-row :gutter="20">
+      <!-- 左侧：控制面板 -->
+      <el-col :span="8">
+        <div class="panel">
+          <h3>水印配置</h3>
+          <el-form label-position="top" size="small">
+            <el-form-item label="水印文本">
+              <el-input v-model="config.text" clearable></el-input>
+            </el-form-item>
+            
+            <el-row :gutter="10">
+              <el-col :span="12">
+                <el-form-item label="字体颜色">
+                  <el-color-picker v-model="config.color"></el-color-picker>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="字体大小 (px)">
+                  <el-input-number v-model="config.fontSize" :min="10" :max="100" style="width: 100%"></el-input-number>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item label="透明度">
+              <el-slider v-model="config.opacity" :min="0.1" :max="1" :step="0.1"></el-slider>
+            </el-form-item>
+
+            <el-form-item label="倾斜角度 (度)">
+              <el-slider v-model="config.angle" :min="-90" :max="90"></el-slider>
+            </el-form-item>
+
+            <el-row :gutter="10">
+              <el-col :span="12">
+                <el-form-item label="水平间距">
+                  <el-input-number v-model="config.spacingX" :min="50" :max="500" style="width: 100%"></el-input-number>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="垂直间距">
+                  <el-input-number v-model="config.spacingY" :min="50" :max="500" style="width: 100%"></el-input-number>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item style="margin-top: 30px;">
+              <input type="file" ref="fileInput" accept="image/*" style="display: none" @change="handleFileChange">
+              <el-button type="primary" icon="el-icon-upload2" @click="$refs.fileInput.click()" style="width: 100%; margin-bottom: 10px;">
+                选择图片
+              </el-button>
+              <el-button type="success" icon="el-icon-download" @click="downloadImage" :disabled="!resultDataUrl" style="width: 100%; margin-left: 0;">
+                导出图片
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-col>
+
+      <!-- 右侧：预览面板 -->
+      <el-col :span="16">
+        <div class="panel">
+          <h3>效果预览</h3>
+          <div class="preview-area">
+            <img v-if="resultDataUrl" :src="resultDataUrl" alt="预览">
+            <div v-else class="empty-text">请先上传一张图片</div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+  </div>
+
+  <script>
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          originalImageObj: null, // 保存加载后的 HTMLImageElement
+          resultDataUrl: '',      // 最终带有水印的 Base64 图片
+          
+          // 默认给一个合适的配置
+          config: {
+            text: '内部机密，严禁外传',
+            color: '#000000',
+            fontSize: 24,
+            opacity: 0.3,
+            angle: -30,
+            spacingX: 250,
+            spacingY: 150
+          }
+        }
+      },
+      watch: {
+        // 深度监听配置变化，实时重绘水印
+        config: {
+          handler() {
+            this.drawWatermark();
+          },
+          deep: true
+        }
+      },
+      methods: {
+        // 处理图片上传
+        handleFileChange(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              this.originalImageObj = img;
+              this.drawWatermark(); // 图片加载完成，开始绘制
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+          // 清空 input，允许重复上传同一张图
+          event.target.value = '';
+        },
+
+        // Canvas 绘制核心逻辑
+        drawWatermark() {
+          if (!this.originalImageObj) return;
+
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          const width = this.originalImageObj.width;
+          const height = this.originalImageObj.height;
+          
+          canvas.width = width;
+          canvas.height = height;
+
+          // 1. 绘制底层原始图片
+          ctx.drawImage(this.originalImageObj, 0, 0, width, height);
+
+          // 2. 设置水印文字样式
+          ctx.font = `${this.config.fontSize}px Microsoft YaHei, sans-serif`;
+          ctx.fillStyle = this.config.color;
+          ctx.globalAlpha = this.config.opacity;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          // 3. 循环绘制水印
+          // 扩大遍历范围，防止图片旋转后边缘出现没有水印的死角
+          const maxDim = Math.max(width, height) * 1.5;
+          const radians = (this.config.angle * Math.PI) / 180;
+
+          for (let x = -maxDim; x < maxDim; x += this.config.spacingX) {
+            for (let y = -maxDim; y < maxDim; y += this.config.spacingY) {
+              ctx.save();
+              // 将画笔原点移动到对应网格点
+              ctx.translate(x, y);
+              // 根据角度旋转
+              ctx.rotate(radians);
+              // 绘制文字
+              ctx.fillText(this.config.text, 0, 0);
+              ctx.restore();
+            }
+          }
+
+          // 4. 将绘制结果保存为预览用的 Base64 数据
+          this.resultDataUrl = canvas.toDataURL('image/png');
+        },
+
+        // 导出下载
+        downloadImage() {
+          if (!this.resultDataUrl) return;
+          
+          const link = document.createElement('a');
+          link.href = this.resultDataUrl;
+          // 生成一个带时间戳的文件名
+          link.download = `watermarked_${new Date().getTime()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
