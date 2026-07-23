@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>愤怒的小鸟 - 10关终极闯关版</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #1a1c23;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      width: 800px;
+      height: 450px;
+    }
+    .hud {
+      position: absolute;
+      top: 15px; left: 20px;
+      font-size: 18px; font-weight: 900;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      color: #ffd32a;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      gap: 20px;
+    }
+    .reset-btn {
+      position: absolute;
+      top: 15px; right: 20px;
+      padding: 8px 16px;
+      background: linear-gradient(45deg, #ff4757, #ff6b81);
+      border: none; border-radius: 20px;
+      color: #fff; font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(255,71,87,0.4);
+      z-index: 10;
+    }
+    .reset-btn:active { transform: scale(0.95); }
+    .instructions {
+      margin-top: 12px;
+      font-size: 13px; color: #888;
+      text-align: center;
+    }
+
+    /* 🏆 通关 & 失败 弹窗 */
+    .modal {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: #2f3542;
+      border: 3px solid #ffa502;
+      border-radius: 16px;
+      padding: 25px 40px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      transform: scale(0.8);
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .modal.show .modal-card {
+      transform: scale(1);
+    }
+    .modal-title {
+      font-size: 28px;
+      font-weight: 900;
+      color: #2ed573;
+      margin-bottom: 10px;
+    }
+    .modal-title.fail { color: #ff4757; }
+    .modal-desc { font-size: 16px; color: #dfe4ea; margin-bottom: 20px; }
+    .modal-btn {
+      padding: 10px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      background: #2ed573;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(46, 213, 115, 0.4);
+    }
+    .modal-btn:hover { background: #26af5f; }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <div class="hud">
+      <div>关卡: <span id="level-num">1</span>/10</div>
+      <div>得分: <span id="score">0</span></div>
+      <div>剩余小鸟: <span id="birds-left">3</span></div>
+    </div>
+    <button class="reset-btn" onclick="resetCurrentLevel()">重置本关</button>
+
+    <!-- 弹窗 -->
+    <div id="modal" class="modal">
+      <div class="modal-card">
+        <div id="modal-title" class="modal-title">关卡完成！</div>
+        <div id="modal-desc" class="modal-desc">成功歼灭了所有绿猪！</div>
+        <button id="modal-btn" class="modal-btn" onclick="handleModalClick()">进入下一关</button>
+      </div>
+    </div>
+  </div>
+  <div class="instructions">🎯 每关 3 羽小鸟，击败所有绿猪！善用抛物线破开石块防线！</div>
+
+<script>
+const { Engine, Render, Runner, Bodies, Composite, Constraint, Mouse, MouseConstraint, Events, Vector } = Matter;
+
+const width = 800;
+const height = 450;
+const slingPos = { x: 160, y: 310 };
+
+let engine, render, runner, bird, slingshot, mouseConstraint;
+let currentLevel = 1;
+let score = 0;
+let birdsLeft = 3;
+let isFired = false;
+let gameStartTime = 0;
+let levelCleared = false;
+
+// 初始化/清理游戏画布与引擎
+function initGame() {
+  const container = document.getElementById('game-container');
+
+  if (render) {
+    Render.stop(render);
+    Runner.stop(runner);
+    Composite.clear(engine.world);
+    Engine.clear(engine);
+    if (render.canvas) render.canvas.remove();
+  }
+
+  gameStartTime = Date.now();
+  isFired = false;
+  levelCleared = false;
+  birdsLeft = 3;
+
+  updateHUD();
+
+  engine = Engine.create();
+  
+  render = Render.create({
+    element: container,
+    engine: engine,
+    options: {
+      width: width,
+      height: height,
+      wireframes: false,
+      background: '#87CEEB'
+    }
+  });
+
+  Render.run(render);
+  runner = Runner.create();
+  Runner.run(runner, engine);
+
+  // 场景底座与边界
+  const ground = Bodies.rectangle(width / 2, height - 15, width, 30, { 
+    isStatic: true, 
+    render: { fillStyle: '#4bc02d' } 
+  });
+  const leftWall = Bodies.rectangle(-10, height / 2, 20, height, { isStatic: true });
+  const rightWall = Bodies.rectangle(width + 10, height / 2, 20, height, { isStatic: true });
+  Composite.add(engine.world, [ground, leftWall, rightWall]);
+
+  // 加载地图与角色
+  loadLevel(currentLevel);
+  spawnBird();
+
+  // 鼠标操作
+  const mouse = Mouse.create(render.canvas);
+  mouseConstraint = MouseConstraint.create(engine, {
+    mouse: mouse,
+    constraint: { stiffness: 0.2, render: { visible: false } }
+  });
+  Composite.add(engine.world, mouseConstraint);
+  render.mouse = mouse;
+
+  Events.on(mouseConstraint, 'enddrag', (e) => {
+    if (e.body === bird) isFired = true;
+  });
+
+  // 物理帧逻辑
+  Events.on(engine, 'afterUpdate', () => {
+    if (isFired && bird && bird.position.x > slingPos.x + 10) {
+      slingshot.bodyB = null;
+      slingshot.render.visible = false;
+    }
+
+    if (isFired && bird) {
+      const isSlow = Vector.magnitude(bird.velocity) < 0.3;
+      const isOutOfBounds = bird.position.x > width + 50 || bird.position.x < -50 || bird.position.y > height;
+
+      if (isSlow || isOutOfBounds) {
+        Composite.remove(engine.world, bird);
+        bird = null;
+        birdsLeft--;
+        updateHUD();
+
+        if (birdsLeft > 0 && !levelCleared && getRemainingPigsCount() > 0) {
+          setTimeout(() => { spawnBird(); }, 400);
+        } else {
+          checkGameStatus();
+        }
+      }
+    }
+  });
+
+  // 碰撞击杀判定
+  Events.on(engine, 'collisionStart', (event) => {
+    if (Date.now() - gameStartTime < 800) return;
+
+    event.pairs.forEach((pair) => {
+      const { bodyA, bodyB } = pair;
+      const checkPigHit = (target) => {
+        if (target.label === 'pig') {
+          const speed = Vector.magnitude(Vector.sub(bodyA.velocity, bodyB.velocity));
+          if (speed > 2.8) {
+            Composite.remove(engine.world, target);
+            score += 200;
+            updateHUD();
+            setTimeout(checkGameStatus, 200);
+          }
+        }
+      };
+      checkPigHit(bodyA);
+      checkPigHit(bodyB);
+    });
+  });
+
+  // 自定义 Canvas 渲染
+  Events.on(render, 'afterRender', () => {
+    const ctx = render.context;
+
+    if (!isFired && bird && mouseConstraint.body === bird) {
+      drawTrajectory(ctx);
+    }
+
+    const bodies = Composite.allBodies(engine.world);
+    bodies.forEach(body => {
+      if (body.label === 'pig') drawPig(ctx, body);
+      else if (body.label === 'bird') drawBird(ctx, body);
+    });
+  });
+}
+
+function spawnBird() {
+  bird = Bodies.circle(slingPos.x, slingPos.y, 18, {
+    density: 0.004,
+    frictionAir: 0.005,
+    label: 'bird',
+    render: { visible: false }
+  });
+
+  slingshot = Constraint.create({
+    pointA: slingPos,
+    bodyB: bird,
+    stiffness: 0.05,
+    damping: 0.01,
+    render: { strokeStyle: '#5d4037', lineWidth: 6 }
+  });
+
+  Composite.add(engine.world, [bird, slingshot]);
+  isFired = false;
+}
+
+function getRemainingPigsCount() {
+  return Composite.allBodies(engine.world).filter(b => b.label === 'pig').length;
+}
+
+function checkGameStatus() {
+  if (levelCleared) return;
+  const pigsLeft = getRemainingPigsCount();
+
+  if (pigsLeft === 0) {
+    levelCleared = true;
+    showModal(true);
+  } else if (birdsLeft === 0 && (!bird || isFired)) {
+    showModal(false);
+  }
+}
+
+// 🗺️ 10 个关卡宏大地图数据
+function loadLevel(level) {
+  const wood = '#a67c52';
+  const stone = '#7f8c8d';
+
+  // 简易工厂函数
+  const createWood = (x, y, w, h) => Bodies.rectangle(x, y, w, h, { label: 'wood', render: { fillStyle: wood } });
+  const createStone = (x, y, w, h) => Bodies.rectangle(x, y, w, h, { label: 'stone', render: { fillStyle: stone } });
+  const createPig = (x, y, r = 15) => Bodies.circle(x, y, r, { label: 'pig', render: { visible: false } });
+
+  const items = [];
+
+  if (level === 1) {
+    // 【1. 练习关】简单小屋
+    items.push(createWood(600, 380, 16, 70), createWood(680, 380, 16, 70));
+    items.push(createWood(640, 335, 110, 14));
+    items.push(createPig(640, 370));
+    items.push(createPig(640, 310));
+
+  } else if (level === 2) {
+    // 【2. 连体塔】
+    items.push(createWood(520, 380, 16, 80), createWood(590, 380, 16, 80));
+    items.push(createWood(555, 330, 90, 14));
+    items.push(createPig(555, 360));
+
+    items.push(createWood(670, 380, 16, 100), createWood(740, 380, 16, 100));
+    items.push(createWood(705, 320, 90, 14));
+    items.push(createPig(705, 360), createPig(705, 295));
+
+  } else if (level === 3) {
+    // 【3. 石头底座堡垒】
+    items.push(createStone(580, 380, 20, 90), createStone(700, 380, 20, 90));
+    items.push(createWood(640, 325, 150, 16));
+    items.push(createPig(610, 365), createPig(670, 365));
+
+    items.push(createWood(610, 280, 16, 60), createWood(670, 280, 16, 60));
+    items.push(createWood(640, 240, 90, 14));
+    items.push(createPig(640, 215));
+
+  } else if (level === 4) {
+    // 【4. 前置防线结构】
+    items.push(createStone(500, 380, 24, 80)); // 盾牌石柱
+    items.push(createWood(600, 380, 16, 80), createWood(680, 380, 16, 80));
+    items.push(createWood(640, 330, 110, 14));
+    items.push(createPig(640, 365));
+
+    items.push(createStone(640, 280, 20, 80));
+    items.push(createPig(640, 220));
+
+  } else if (level === 5) {
+    // 【5. 高耸石塔】
+    items.push(createStone(620, 380, 20, 100), createStone(700, 380, 20, 100));
+    items.push(createWood(660, 320, 110, 16));
+    items.push(createPig(660, 360));
+
+    items.push(createStone(630, 260, 18, 80), createStone(690, 260, 18, 80));
+    items.push(createWood(660, 210, 90, 14));
+    items.push(createPig(660, 240));
+
+    items.push(createWood(660, 160, 14, 70));
+    items.push(createPig(660, 110));
+
+  } else if (level === 6) {
+    // 【6. 地下室与屋顶】
+    items.push(createWood(520, 380, 16, 70), createWood(600, 380, 16, 70), createWood(680, 380, 16, 70));
+    items.push(createStone(600, 335, 190, 16));
+    items.push(createPig(560, 370), createPig(640, 370));
+
+    items.push(createWood(560, 285, 16, 70), createWood(640, 285, 16, 70));
+    items.push(createWood(600, 240, 110, 14));
+    items.push(createPig(600, 215));
+
+  } else if (level === 7) {
+    // 【7. 重型交错城堡】
+    items.push(createStone(540, 380, 20, 90), createStone(620, 380, 20, 90), createStone(700, 380, 20, 90));
+    items.push(createWood(620, 325, 200, 16));
+    items.push(createPig(580, 365), createPig(660, 365));
+
+    items.push(createStone(580, 265, 20, 90), createStone(660, 265, 20, 90));
+    items.push(createWood(620, 210, 120, 16));
+    items.push(createPig(620, 250), createPig(620, 185));
+
+  } else if (level === 8) {
+    // 【8. 三重掩体堡垒】
+    items.push(createWood(480, 380, 16, 80), createWood(550, 380, 16, 80));
+    items.push(createWood(515, 330, 90, 14));
+    items.push(createPig(515, 365));
+
+    items.push(createStone(600, 380, 20, 100), createStone(670, 380, 20, 100));
+    items.push(createWood(635, 320, 90, 14));
+    items.push(createPig(635, 365), createPig(635, 295));
+
+    items.push(createWood(720, 380, 16, 80), createWood(780, 380, 16, 80));
+    items.push(createWood(750, 330, 80, 14));
+    items.push(createPig(750, 365));
+
+  } else if (level === 9) {
+    // 【9. 巨型金字塔】
+    items.push(createWood(500, 380, 16, 70), createWood(580, 380, 16, 70), createWood(660, 380, 16, 70), createWood(740, 380, 16, 70));
+    items.push(createStone(620, 335, 270, 16));
+    items.push(createPig(540, 370), createPig(620, 370), createPig(700, 370));
+
+    items.push(createWood(540, 285, 16, 70), createWood(620, 285, 16, 70), createWood(700, 285, 16, 70));
+    items.push(createStone(620, 240, 190, 16));
+    items.push(createPig(580, 275), createPig(660, 275));
+
+    items.push(createWood(580, 190, 16, 70), createWood(660, 190, 16, 70));
+    items.push(createWood(620, 145, 110, 14));
+    items.push(createPig(620, 120));
+
+  } else if (level === 10) {
+    // 【10. 终极Boss猪的要塞】
+    items.push(createStone(480, 380, 25, 100), createStone(560, 380, 25, 100), createStone(640, 380, 25, 100), createStone(720, 380, 25, 100));
+    items.push(createWood(600, 320, 280, 18));
+    items.push(createPig(520, 360, 16), createPig(600, 360, 20), createPig(680, 360, 16)); // 中间大Boss猪
+
+    items.push(createStone(520, 250, 20, 100), createStone(680, 250, 20, 100));
+    items.push(createWood(600, 190, 190, 16));
+    items.push(createPig(600, 230, 16));
+
+    items.push(createWood(560, 130, 16, 80), createWood(640, 130, 16, 80));
+    items.push(createStone(600, 80, 110, 16));
+    items.push(createPig(600, 50, 14));
+  }
+
+  Composite.add(engine.world, items);
+}
+
+// 🎯 绘制预瞄轨迹
+function drawTrajectory(ctx) {
+  const forceX = (slingPos.x - bird.position.x) * 0.13;
+  const forceY = (slingPos.y - bird.position.y) * 0.13;
+  
+  let vx = (forceX / bird.density) * 0.0004; 
+  let vy = (forceY / bird.density) * 0.0004;
+
+  let currX = bird.position.x;
+  let currY = bird.position.y;
+  const gravity = engine.world.gravity.y * engine.world.gravity.scale;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+
+  for (let i = 0; i < 28; i++) {
+    currX += vx;
+    currY += vy;
+    vy += gravity * 16;
+
+    if (i % 2 === 0) {
+      const radius = Math.max(1.5, 4 - i * 0.1);
+      ctx.beginPath();
+      ctx.arc(currX, currY, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// 🐷 绘制绿猪
+function drawPig(ctx, body) {
+  const { x, y } = body.position;
+  const r = body.circleRadius;
+  const angle = body.angle;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = '#27ae60';
+  ctx.beginPath(); ctx.arc(-r * 0.7, -r * 0.7, r * 0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.7, -r * 0.7, r * 0.35, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#2ecc71';
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#27ae60'; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-r * 0.35, -r * 0.2, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.2, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.2, r * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.4, -r * 0.2, r * 0.12, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#27ae60';
+  ctx.beginPath(); ctx.ellipse(0, r * 0.15, r * 0.45, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1e8449';
+  ctx.beginPath(); ctx.arc(-r * 0.18, r * 0.15, r * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.18, r * 0.15, r * 0.1, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// 🐦 绘制红鸟
+function drawBird(ctx, body) {
+  const { x, y } = body.position;
+  const r = body.circleRadius;
+  const angle = body.angle;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#f8d7da';
+  ctx.beginPath(); ctx.arc(0, r * 0.3, r * 0.6, 0, Math.PI); ctx.fill();
+
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.7, -r * 0.3);
+  ctx.lineTo(0, -r * 0.1);
+  ctx.lineTo(r * 0.7, -r * 0.3);
+  ctx.lineTo(0, -r * 0.3);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.05, r * 0.22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.25, -r * 0.05, r * 0.22, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(-r * 0.15, -r * 0.05, r * 0.08, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.15, -r * 0.05, r * 0.08, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#f1c40f';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.3, r * 0.1);
+  ctx.lineTo(r * 0.3, r * 0.1);
+  ctx.lineTo(0, r * 0.55);
+  ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+}
+
+// 更新 HUD
+function updateHUD() {
+  document.getElementById('level-num').innerText = currentLevel;
+  document.getElementById('score').innerText = score;
+  document.getElementById('birds-left').innerText = birdsLeft;
+}
+
+// 显示弹窗
+function showModal(isVictory) {
+  const modal = document.getElementById('modal');
+  const title = document.getElementById('modal-title');
+  const desc = document.getElementById('modal-desc');
+  const btn = document.getElementById('modal-btn');
+
+  if (isVictory) {
+    title.innerText = currentLevel === 10 ? "🏆 恭喜大获全胜通关！" : "🎉 关卡完成！";
+    title.className = "modal-title";
+    desc.innerText = currentLevel === 10 ? `太强了！你通关了全部10个关卡！最终得分: ${score}` : `成功消灭所有绿猪，准备好挑战下一关了吗？`;
+    btn.innerText = currentLevel === 10 ? "重新玩第 1 关" : "进入下一关";
+  } else {
+    title.innerText = "💥 挑战失败！";
+    title.className = "modal-title fail";
+    desc.innerText = "小鸟用光了，但还有绿猪存活。再试一次吧！";
+    btn.innerText = "重试本关";
+  }
+
+  modal.classList.add('show');
+}
+
+// 弹窗点击响应
+function handleModalClick() {
+  const modal = document.getElementById('modal');
+  modal.classList.remove('show');
+
+  const pigsLeft = getRemainingPigsCount();
+
+  if (pigsLeft === 0) {
+    if (currentLevel < 10) {
+      currentLevel++;
+    } else {
+      currentLevel = 1;
+      score = 0;
+    }
+  }
+  
+  resetCurrentLevel();
+}
+
+// 重置关卡
+function resetCurrentLevel() {
+  initGame();
+}
+
+window.onload = initGame;
+</script>
+</body>
+</html>
