@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <!-- 阻止移动端双击缩放与默认滑动行为 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>雷霆战机 - 完美全兼容带暂停版</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <style>
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #050711;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 🎮 容器自适应核心样式 */
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 480px;
+      max-height: 720px;
+      background: #070a19;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 在大屏 PC 上增加精致边框与阴影 */
+    @media (min-width: 500px) and (min-height: 700px) {
+      #app {
+        border-radius: 16px;
+        box-shadow: 0 0 40px rgba(0, 195, 255, 0.3), 0 0 0 2px rgba(255, 255, 255, 0.1);
+        height: 90vh;
+      }
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* HUD 顶栏 UI */
+    .hud {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 12px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      font-size: 14px;
+      font-weight: bold;
+      text-shadow: 0 0 5px #000;
+      z-index: 10;
+    }
+    .hud-item { display: flex; align-items: center; gap: 8px; }
+    .hp-bar {
+      width: 80px;
+      height: 10px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 5px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.4);
+    }
+    .hp-inner {
+      height: 100%;
+      background: linear-gradient(90deg, #ff4757, #2ed573);
+      transition: width 0.2s;
+    }
+
+    /* ⏸️ 暂停按钮 */
+    .pause-btn {
+      pointer-events: auto;
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      font-size: 14px;
+      color: #fff;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s, transform 0.1s;
+    }
+    .pause-btn:active { transform: scale(0.9); background: rgba(255, 255, 255, 0.3); }
+
+    /* Buff 激活状态提示 */
+    .buff-status {
+      position: absolute;
+      top: 50px;
+      left: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .tag {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      animation: pulse 1s infinite alternate;
+    }
+    .tag-shield { background: rgba(0, 168, 255, 0.8); border: 1px solid #00a8ff; }
+    .tag-slow { background: rgba(46, 213, 115, 0.8); border: 1px solid #2ed573; }
+
+    /* Overlay 浮层遮罩 */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 7, 17, 0.88);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      text-align: center;
+      padding: 24px;
+    }
+    .title { font-size: 32px; font-weight: 900; margin-bottom: 8px; color: #00d2d3; text-shadow: 0 0 10px #00d2d3; }
+    .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+    .btn {
+      padding: 12px 32px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      background: linear-gradient(45deg, #ff4757, #ff6b81);
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4);
+      transition: transform 0.1s;
+    }
+    .btn-secondary {
+      background: linear-gradient(45deg, #2e86de, #00d2d3);
+      box-shadow: 0 5px 15px rgba(0, 210, 211, 0.4);
+    }
+    .btn:active { transform: scale(0.95); }
+
+    @keyframes pulse {
+      from { opacity: 0.7; }
+      to { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app" ref="container">
+  <!-- HUD 头部血条、得分与暂停按钮 -->
+  <div class="hud" v-if="gameState === 'PLAYING'">
+    <div class="hud-item">
+      <span>HP</span>
+      <div class="hp-bar"><div class="hp-inner" :style="{ width: (player.hp / player.maxHp * 100) + '%' }"></div></div>
+    </div>
+    <div class="hud-item" style="color: #ffd32a;">{{ score }} 分</div>
+    <!-- 暂停/继续按钮 -->
+    <div class="pause-btn" @click="togglePause">
+      {{ isPaused ? '▶' : '⏸' }}
+    </div>
+  </div>
+
+  <!-- 激活中的 Buff 状态 -->
+  <div class="buff-status" v-if="gameState === 'PLAYING'">
+    <div v-if="player.shieldTimer > 0" class="tag tag-shield">🛡️ 能量护体 (近战摩擦高伤)</div>
+    <div v-if="slowTimer > 0" class="tag tag-slow">⏳ 时空减速中</div>
+  </div>
+
+  <!-- 1. 游戏未开始 / 死亡结算 弹窗 -->
+  <div class="overlay" v-if="gameState !== 'PLAYING'">
+    <h1 class="title">{{ gameState === 'INIT' ? '雷霆战机' : 'GAME OVER' }}</h1>
+    <p v-if="gameState === 'GAMEOVER'" style="margin: 10px 0; color: #ccc;">最终得分: <b style="color: #ffd32a; font-size: 22px;">{{ score }}</b></p>
+    
+    <div style="font-size: 12px; color: #aaa; text-align: left; margin: 15px 0; line-height: 1.8; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+      🎮 <b>操作说明</b>：按住屏幕/鼠标拖拽移动战机<br>
+      ⏸️ <b>暂停</b>：点击右上角 ⏸️ 或按键盘 <b>Esc / P</b> 键<br>
+      🔴 <b>火力包 (P)</b>：升级弹幕（单发 $\to$ 双发 $\to$ 散射）<br>
+      🔵 <b>护体包 (S)</b>：开启无敌护盾，<b>贴脸可烫死敌机</b><br>
+      🟢 <b>减速包 (T)</b>：全屏敌机与弹幕慢动作 5 秒
+    </div>
+
+    <button class="btn" @click="startGame">{{ gameState === 'INIT' ? '开始出击' : '重新出击' }}</button>
+  </div>
+
+  <!-- 2. 暂停界面 弹窗 -->
+  <div class="overlay" v-if="gameState === 'PLAYING' && isPaused">
+    <h1 class="title" style="color: #ffd32a; text-shadow: 0 0 10px #ffd32a;">游戏暂停</h1>
+    <p style="color: #ccc; margin-top: 10px;">战机休整中，随时可以重返战场！</p>
+    
+    <div class="btn-group">
+      <button class="btn btn-secondary" @click="togglePause">继续游戏</button>
+      <button class="btn" @click="startGame">重新开始</button>
+    </div>
+  </div>
+
+  <canvas ref="canvas"></canvas>
+</div>
+
+<script>
+new Vue({
+  el: '#app',
+  data: {
+    gameState: 'INIT', // INIT, PLAYING, GAMEOVER
+    isPaused: false,   // 暂停状态标志位
+    score: 0,
+    slowTimer: 0,
+    ctx: null,
+    animId: null,
+    width: 480,  
+    height: 720, 
+    
+    player: {
+      x: 240, y: 600, r: 18,
+      hp: 10, maxHp: 10,
+      weaponLevel: 1,
+      shieldTimer: 0,
+      shootCooldown: 0
+    },
+    
+    bullets: [],
+    enemyBullets: [],
+    enemies: [],
+    buffs: [],
+    particles: []
+  },
+  mounted() {
+    this.ctx = this.$refs.canvas.getContext('2d');
+    this.resizeCanvas();
+    window.addEventListener('resize', this.resizeCanvas);
+    
+    // 监听全局键盘按键（绑定快捷键暂停）
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+        this.togglePause();
+      }
+    });
+
+    this.bindControls();
+    this.draw();
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.resizeCanvas);
+  },
+  methods: {
+    // 切换暂停状态
+    togglePause() {
+      if (this.gameState !== 'PLAYING') return;
+      this.isPaused = !this.isPaused;
+    },
+
+    resizeCanvas() {
+      const container = this.$refs.container;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      this.width = rect.width;
+      this.height = rect.height;
+      this.$refs.canvas.width = this.width;
+      this.$refs.canvas.height = this.height;
+      
+      if (this.gameState === 'INIT') {
+        this.player.x = this.width / 2;
+        this.player.y = this.height - 100;
+      }
+    },
+
+    startGame() {
+      this.score = 0;
+      this.slowTimer = 0;
+      this.isPaused = false;
+      this.player = {
+        x: this.width / 2, y: this.height - 100, r: 18,
+        hp: 10, maxHp: 10,
+        weaponLevel: 1,
+        shieldTimer: 0,
+        shootCooldown: 0
+      };
+      this.bullets = [];
+      this.enemyBullets = [];
+      this.enemies = [];
+      this.buffs = [];
+      this.particles = [];
+      this.gameState = 'PLAYING';
+
+      if (this.animId) cancelAnimationFrame(this.animId);
+      this.gameLoop();
+    },
+
+    bindControls() {
+      const canvas = this.$refs.canvas;
+      
+      const handleMove = (e) => {
+        // 暂停或未开始时不响应控制
+        if (this.gameState !== 'PLAYING' || this.isPaused) return;
+        
+        if (e.cancelable) e.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        let clientX, clientY;
+
+        if (e.touches && e.touches.length > 0) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+
+        this.player.x = Math.max(15, Math.min(this.width - 15, clientX - rect.left));
+        this.player.y = Math.max(15, Math.min(this.height - 15, clientY - rect.top));
+      };
+
+      canvas.addEventListener('mousemove', handleMove);
+      canvas.addEventListener('touchstart', handleMove, { passive: false });
+      canvas.addEventListener('touchmove', handleMove, { passive: false });
+    },
+
+    gameLoop() {
+      if (this.gameState !== 'PLAYING') return;
+
+      // 核心修改：没有暂停时才更新游戏物理逻辑
+      if (!this.isPaused) {
+        this.update();
+      }
+      
+      this.draw(); // 即使暂停也持续渲染画面，保证战场定格
+      this.animId = requestAnimationFrame(this.gameLoop.bind(this));
+    },
+
+    update() {
+      if (this.slowTimer > 0) this.slowTimer--;
+      if (this.player.shieldTimer > 0) this.player.shieldTimer--;
+
+      const enemyTimeScale = this.slowTimer > 0 ? 0.3 : 1.0;
+
+      // 1. 动态刷怪
+      if (Math.random() < 0.035) {
+        const rand = Math.random();
+        if (rand < 0.6) {
+          this.enemies.push({ x: Math.random() * (this.width - 40) + 20, y: -20, r: 14, hp: 1, maxHp: 1, type: 'scout', vx: (Math.random()-0.5)*2, vy: 3 });
+        } else if (rand < 0.85) {
+          this.enemies.push({ x: Math.random() * (this.width - 40) + 20, y: -20, r: 16, hp: 3, maxHp: 3, type: 'kamikaze', vx: 0, vy: 2.5 });
+        } else {
+          this.enemies.push({ x: Math.random() * (this.width - 80) + 40, y: -40, r: 28, hp: 15, maxHp: 15, type: 'tank', vx: (Math.random()-0.5)*1, vy: 1, shootCd: 0 });
+        }
+      }
+
+      // 2. 玩家自动开火
+      this.player.shootCooldown--;
+      if (this.player.shootCooldown <= 0) {
+        this.player.shootCooldown = this.player.weaponLevel >= 3 ? 6 : 9;
+        const p = this.player;
+        if (p.weaponLevel === 1) {
+          this.bullets.push({ x: p.x, y: p.y - 20, vx: 0, vy: -12, dmg: 1 });
+        } else if (p.weaponLevel === 2) {
+          this.bullets.push({ x: p.x - 10, y: p.y - 15, vx: 0, vy: -12, dmg: 1 });
+          this.bullets.push({ x: p.x + 10, y: p.y - 15, vx: 0, vy: -12, dmg: 1 });
+        } else {
+          this.bullets.push({ x: p.x, y: p.y - 20, vx: 0, vy: -12, dmg: 1 });
+          this.bullets.push({ x: p.x - 12, y: p.y - 15, vx: -2, vy: -11, dmg: 1 });
+          this.bullets.push({ x: p.x + 12, y: p.y - 15, vx: 2, vy: -11, dmg: 1 });
+        }
+      }
+
+      // 3. 子弹移动
+      for (let i = this.bullets.length - 1; i >= 0; i--) {
+        let b = this.bullets[i];
+        b.x += b.vx; b.y += b.vy;
+        if (b.y < -10) this.bullets.splice(i, 1);
+      }
+
+      // 4. 敌机逻辑与碰撞判定
+      for (let i = this.enemies.length - 1; i >= 0; i--) {
+        let e = this.enemies[i];
+        
+        if (e.type === 'kamikaze') {
+          let dx = this.player.x - e.x;
+          e.vx += dx * 0.002;
+          e.vx = Math.max(-2, Math.min(2, e.vx));
+        } else if (e.type === 'tank') {
+          e.shootCd--;
+          if (e.shootCd <= 0) {
+            e.shootCd = 80;
+            this.enemyBullets.push({ x: e.x, y: e.y + e.r, vx: 0, vy: 4.5, r: 6, dmg: 2, color: '#ff4757' });
+          }
+        }
+
+        e.x += e.vx * enemyTimeScale;
+        e.y += e.vy * enemyTimeScale;
+
+        // 子弹打中敌机
+        for (let j = this.bullets.length - 1; j >= 0; j--) {
+          let b = this.bullets[j];
+          if (this.checkCircleCollide(b.x, b.y, 4, e.x, e.y, e.r)) {
+            e.hp -= b.dmg;
+            this.createExplosion(b.x, b.y, '#00d2d3', 3);
+            this.bullets.splice(j, 1);
+            if (e.hp <= 0) break;
+          }
+        }
+
+        // 护盾近战贴脸摩擦 / 撞机
+        let distToPlayer = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+        
+        if (this.player.shieldTimer > 0 && distToPlayer < (42 + e.r)) {
+          e.hp -= 0.6; 
+          this.createExplosion((e.x + this.player.x)/2, (e.y + this.player.y)/2, '#00a8ff', 2);
+        }
+
+        if (distToPlayer < (this.player.r + e.r)) {
+          if (this.player.shieldTimer <= 0) {
+            this.player.hp -= 2;
+            this.createExplosion(this.player.x, this.player.y, '#ff4757', 10);
+            if (this.player.hp <= 0) this.gameOver();
+          }
+          e.hp = 0;
+        }
+
+        if (e.hp <= 0) {
+          this.score += e.maxHp * 10;
+          this.createExplosion(e.x, e.y, e.type === 'tank' ? '#9b59b6' : '#ff4757', 15);
+          if (Math.random() < 0.25) {
+            const types = ['power', 'shield', 'time'];
+            this.buffs.push({
+              x: e.x, y: e.y,
+              type: types[Math.floor(Math.random() * types.length)],
+              vy: 1.5
+            });
+          }
+          this.enemies.splice(i, 1);
+          continue;
+        }
+
+        if (e.y > this.height + 40) this.enemies.splice(i, 1);
+      }
+
+      // 5. 敌方子弹判定
+      for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
+        let eb = this.enemyBullets[i];
+        eb.x += eb.vx * enemyTimeScale;
+        eb.y += eb.vy * enemyTimeScale;
+
+        if (this.checkCircleCollide(eb.x, eb.y, eb.r, this.player.x, this.player.y, this.player.r)) {
+          if (this.player.shieldTimer <= 0) {
+            this.player.hp -= eb.dmg;
+            this.createExplosion(this.player.x, this.player.y, '#ff4757', 8);
+            if (this.player.hp <= 0) this.gameOver();
+          } else {
+            this.createExplosion(eb.x, eb.y, '#00a8ff', 5);
+          }
+          this.enemyBullets.splice(i, 1);
+          continue;
+        }
+
+        if (eb.y > this.height + 20) this.enemyBullets.splice(i, 1);
+      }
+
+      // 6. 吸收 Buff
+      for (let i = this.buffs.length - 1; i >= 0; i--) {
+        let bf = this.buffs[i];
+        bf.y += bf.vy;
+        if (this.checkCircleCollide(bf.x, bf.y, 16, this.player.x, this.player.y, this.player.r + 10)) {
+          if (bf.type === 'power') {
+            this.player.weaponLevel = Math.min(3, this.player.weaponLevel + 1);
+          } else if (bf.type === 'shield') {
+            this.player.shieldTimer = 300;
+          } else if (bf.type === 'time') {
+            this.slowTimer = 300;
+          }
+          this.score += 5;
+          this.buffs.splice(i, 1);
+          continue;
+        }
+        if (bf.y > this.height + 20) this.buffs.splice(i, 1);
+      }
+
+      // 7. 粒子更新
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        let p = this.particles[i];
+        p.x += p.vx; p.y += p.vy;
+        p.alpha -= 0.03;
+        if (p.alpha <= 0) this.particles.splice(i, 1);
+      }
+    },
+
+    draw() {
+      const ctx = this.ctx;
+      ctx.clearRect(0, 0, this.width, this.height);
+
+      // 1. 动态网格背景
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      let offset = (Date.now() / 20) % 40;
+      for (let x = 0; x < this.width; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.height); ctx.stroke();
+      }
+      for (let y = offset; y < this.height; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.width, y); ctx.stroke();
+      }
+
+      // 2. Buff 掉落物
+      this.buffs.forEach(bf => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bf.x, bf.y, 13, 0, Math.PI*2);
+        ctx.fillStyle = bf.type === 'power' ? '#ff4757' : (bf.type === 'shield' ? '#00a8ff' : '#2ed573');
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bf.type === 'power' ? 'P' : (bf.type === 'shield' ? 'S' : 'T'), bf.x, bf.y);
+        ctx.restore();
+      });
+
+      // 3. 玩家子弹
+      ctx.fillStyle = '#00d2d3';
+      this.bullets.forEach(b => {
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+      });
+
+      // 4. 敌方子弹
+      this.enemyBullets.forEach(eb => {
+        ctx.fillStyle = eb.color || '#eccc68';
+        ctx.beginPath(); ctx.arc(eb.x, eb.y, eb.r, 0, Math.PI*2); ctx.fill();
+      });
+
+      // 5. 敌机渲染
+      this.enemies.forEach(e => {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        if (e.type === 'scout') {
+          ctx.fillStyle = '#ff4757';
+          ctx.beginPath();
+          ctx.moveTo(0, e.r); ctx.lineTo(-e.r, -e.r); ctx.lineTo(e.r, -e.r);
+          ctx.closePath(); ctx.fill();
+        } else if (e.type === 'kamikaze') {
+          ctx.fillStyle = '#ffa502';
+          ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI*2); ctx.fill();
+        } else if (e.type === 'tank') {
+          ctx.fillStyle = '#8e44ad';
+          ctx.fillRect(-e.r, -e.r, e.r*2, e.r*2);
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(-e.r, -e.r - 8, e.r*2, 4);
+          ctx.fillStyle = '#2ed573';
+          ctx.fillRect(-e.r, -e.r - 8, (e.hp / e.maxHp) * e.r*2, 4);
+        }
+        ctx.restore();
+      });
+
+      // 6. 玩家战机与护盾
+      const p = this.player;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = '#1e90ff';
+      ctx.beginPath();
+      ctx.moveTo(0, -p.r);
+      ctx.lineTo(-p.r, p.r);
+      ctx.lineTo(0, p.r*0.5);
+      ctx.lineTo(p.r, p.r);
+      ctx.closePath();
+      ctx.fill();
+
+      if (p.shieldTimer > 0) {
+        ctx.strokeStyle = '#00a8ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = 'rgba(0, 168, 255, 0.15)'; ctx.fill();
+      }
+      ctx.restore();
+
+      // 7. 爆炸粒子
+      this.particles.forEach(pt => {
+        ctx.fillStyle = pt.color;
+        ctx.globalAlpha = pt.alpha;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1.0;
+      });
+    },
+
+    checkCircleCollide(x1, y1, r1, x2, y2, r2) {
+      return Math.hypot(x1 - x2, y1 - y2) < (r1 + r2);
+    },
+
+    createExplosion(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 4 + 1;
+        this.particles.push({
+          x: x, y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          r: Math.random() * 3 + 1,
+          color: color,
+          alpha: 1.0
+        });
+      }
+    },
+
+    gameOver() {
+      this.gameState = 'GAMEOVER';
+    }
+  }
+});
+</script>
+</body>
+</html>
