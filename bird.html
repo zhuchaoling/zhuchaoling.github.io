@@ -2,34 +2,42 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>愤怒的小鸟 - 10关终极闯关版</title>
+  <!-- 禁用移动端缩放与双击放大的 viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>愤怒的小鸟 - 全平台兼容版 (PC & Mobile)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-    body {
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      user-select: none; 
+      -webkit-user-select: none; 
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: #1a1c23;
       color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      touch-action: none; /* 禁用移动端默认触摸滚动/缩放 */
     }
     #game-container {
       position: relative;
-      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
-      width: 800px;
-      height: 450px;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
     }
     .hud {
       position: absolute;
-      top: 15px; left: 20px;
-      font-size: 18px; font-weight: 900;
+      top: 12px; left: 16px;
+      font-size: 16px; font-weight: 900;
       text-shadow: 0 2px 4px rgba(0,0,0,0.8);
       color: #ffd32a;
       pointer-events: none;
@@ -37,22 +45,55 @@
       display: flex;
       gap: 20px;
     }
+    .controls-tip {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: normal;
+      display: none; /* PC端显示快捷键提示 */
+    }
+    @media (min-width: 769px) {
+      .controls-tip { display: inline-block; }
+    }
     .reset-btn {
       position: absolute;
-      top: 15px; right: 20px;
-      padding: 8px 16px;
+      top: 10px; right: 16px;
+      padding: 8px 18px;
       background: linear-gradient(45deg, #ff4757, #ff6b81);
       border: none; border-radius: 20px;
-      color: #fff; font-weight: bold;
+      color: #fff; font-weight: bold; font-size: 14px;
       cursor: pointer;
       box-shadow: 0 4px 10px rgba(255,71,87,0.4);
       z-index: 10;
+      transition: transform 0.1s ease, background 0.2s;
     }
-    .reset-btn:active { transform: scale(0.95); }
-    .instructions {
-      margin-top: 12px;
-      font-size: 13px; color: #888;
+    .reset-btn:hover { background: linear-gradient(45deg, #ff6b81, #ff4757); }
+    .reset-btn:active { transform: scale(0.92); }
+
+    /* 📱 仅在小屏竖屏（移动端）时显示的横屏提示蒙层 */
+    #orient-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #121319;
+      z-index: 999;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
+      padding: 20px;
+    }
+    #orient-overlay .icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+      animation: rotateAnim 2s infinite ease-in-out;
+    }
+    @keyframes rotateAnim {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
+    }
+    /* 仅在屏幕宽度较小且为竖屏（高度 > 宽度）时触发提示 */
+    @media screen and (orientation: portrait) and (max-width: 768px) {
+      #orient-overlay { display: flex; }
     }
 
     /* 🏆 通关 & 失败 弹窗 */
@@ -78,46 +119,46 @@
       background: #2f3542;
       border: 3px solid #ffa502;
       border-radius: 16px;
-      padding: 25px 40px;
+      padding: 24px 36px;
       text-align: center;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
       transform: scale(0.8);
       transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      max-width: 90%;
+      width: 380px;
     }
-    .modal.show .modal-card {
-      transform: scale(1);
-    }
-    .modal-title {
-      font-size: 28px;
-      font-weight: 900;
-      color: #2ed573;
-      margin-bottom: 10px;
-    }
+    .modal.show .modal-card { transform: scale(1); }
+    .modal-title { font-size: 24px; font-weight: 900; color: #2ed573; margin-bottom: 10px; }
     .modal-title.fail { color: #ff4757; }
-    .modal-desc { font-size: 16px; color: #dfe4ea; margin-bottom: 20px; }
+    .modal-desc { font-size: 14px; color: #dfe4ea; margin-bottom: 20px; line-height: 1.5; }
     .modal-btn {
       padding: 10px 24px;
-      font-size: 16px;
-      font-weight: bold;
-      color: #fff;
-      background: #2ed573;
-      border: none;
-      border-radius: 25px;
-      cursor: pointer;
-      box-shadow: 0 4px 15px rgba(46, 213, 115, 0.4);
+      font-size: 15px; font-weight: bold; color: #fff;
+      background: #2ed573; border: none; border-radius: 25px;
+      cursor: pointer; box-shadow: 0 4px 15px rgba(46, 213, 115, 0.4);
+      transition: transform 0.1s ease, background 0.2s;
     }
     .modal-btn:hover { background: #26af5f; }
+    .modal-btn:active { transform: scale(0.95); }
   </style>
 </head>
 <body>
+
+  <!-- 竖屏强制旋转提示（仅在移动端竖屏显示） -->
+  <div id="orient-overlay">
+    <div class="icon">📱</div>
+    <h2>请旋转手机以横屏游玩</h2>
+    <p style="color:#aaa; font-size:13px; margin-top:8px;">体验更广阔的视野与操作手感</p>
+  </div>
 
   <div id="game-container">
     <div class="hud">
       <div>关卡: <span id="level-num">1</span>/10</div>
       <div>得分: <span id="score">0</span></div>
       <div>剩余小鸟: <span id="birds-left">3</span></div>
+      <div class="controls-tip">(快捷键: [R]重置 [Space]继续)</div>
     </div>
-    <button class="reset-btn" onclick="resetCurrentLevel()">重置本关</button>
+    <button class="reset-btn" onclick="resetCurrentLevel()">重置 (R)</button>
 
     <!-- 弹窗 -->
     <div id="modal" class="modal">
@@ -128,14 +169,13 @@
       </div>
     </div>
   </div>
-  <div class="instructions">🎯 每关 3 羽小鸟，击败所有绿猪！善用抛物线破开石块防线！</div>
 
 <script>
 const { Engine, Render, Runner, Bodies, Composite, Constraint, Mouse, MouseConstraint, Events, Vector } = Matter;
 
-const width = 800;
-const height = 450;
-const slingPos = { x: 160, y: 310 };
+let width = window.innerWidth;
+let height = window.innerHeight;
+let slingPos = { x: width * 0.18, y: height * 0.68 };
 
 let engine, render, runner, bird, slingshot, mouseConstraint;
 let currentLevel = 1;
@@ -145,9 +185,21 @@ let isFired = false;
 let gameStartTime = 0;
 let levelCleared = false;
 
+// 判断是否为移动端
+const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 // 初始化/清理游戏画布与引擎
 function initGame() {
   const container = document.getElementById('game-container');
+
+  // 更新当前窗口尺寸
+  width = window.innerWidth;
+  height = window.innerHeight;
+  // 计算弹性锚点，根据宽高比做自适应调整
+  slingPos = { 
+    x: Math.max(120, width * 0.18), 
+    y: Math.min(height - 120, height * 0.68) 
+  };
 
   if (render) {
     Render.stop(render);
@@ -181,33 +233,45 @@ function initGame() {
   runner = Runner.create();
   Runner.run(runner, engine);
 
-  // 场景底座与边界
-  const ground = Bodies.rectangle(width / 2, height - 15, width, 30, { 
+  // 边界设置：保持顶部开放，底和两侧封闭
+  const groundHeight = 30;
+  const ground = Bodies.rectangle(width / 2, height - groundHeight / 2, width * 2, groundHeight, { 
     isStatic: true, 
     render: { fillStyle: '#4bc02d' } 
   });
-  const leftWall = Bodies.rectangle(-10, height / 2, 20, height, { isStatic: true });
-  const rightWall = Bodies.rectangle(width + 10, height / 2, 20, height, { isStatic: true });
+  const leftWall = Bodies.rectangle(-20, height / 2, 40, height * 4, { isStatic: true });
+  const rightWall = Bodies.rectangle(width + 20, height / 2, 40, height * 4, { isStatic: true });
   Composite.add(engine.world, [ground, leftWall, rightWall]);
 
   // 加载地图与角色
   loadLevel(currentLevel);
   spawnBird();
 
-  // 鼠标操作
+  // 鼠标/移动端触摸交互
   const mouse = Mouse.create(render.canvas);
+  
+  // 如果是 PC 端，允许在 Canvas 外释放鼠标
+  if (!isMobileDevice) {
+    mouse.element.removeEventListener("mousewheel", mouse.mousewheel);
+    mouse.element.removeEventListener("DOMMouseScroll", mouse.mousewheel);
+  }
+
   mouseConstraint = MouseConstraint.create(engine, {
     mouse: mouse,
-    constraint: { stiffness: 0.2, render: { visible: false } }
+    constraint: { 
+      stiffness: 0.2, 
+      render: { visible: false } 
+    }
   });
   Composite.add(engine.world, mouseConstraint);
   render.mouse = mouse;
 
+  // 松手/抬笔事件
   Events.on(mouseConstraint, 'enddrag', (e) => {
     if (e.body === bird) isFired = true;
   });
 
-  // 物理帧逻辑
+  // 物理更新逻辑
   Events.on(engine, 'afterUpdate', () => {
     if (isFired && bird && bird.position.x > slingPos.x + 10) {
       slingshot.bodyB = null;
@@ -215,8 +279,8 @@ function initGame() {
     }
 
     if (isFired && bird) {
-      const isSlow = Vector.magnitude(bird.velocity) < 0.3;
-      const isOutOfBounds = bird.position.x > width + 50 || bird.position.x < -50 || bird.position.y > height;
+      const isSlow = Vector.magnitude(bird.velocity) < 0.25;
+      const isOutOfBounds = bird.position.x > width + 100 || bird.position.x < -100 || bird.position.y > height + 100;
 
       if (isSlow || isOutOfBounds) {
         Composite.remove(engine.world, bird);
@@ -233,7 +297,7 @@ function initGame() {
     }
   });
 
-  // 碰撞击杀判定
+  // 碰撞事件
   Events.on(engine, 'collisionStart', (event) => {
     if (Date.now() - gameStartTime < 800) return;
 
@@ -242,7 +306,7 @@ function initGame() {
       const checkPigHit = (target) => {
         if (target.label === 'pig') {
           const speed = Vector.magnitude(Vector.sub(bodyA.velocity, bodyB.velocity));
-          if (speed > 2.8) {
+          if (speed > 2.5) {
             Composite.remove(engine.world, target);
             score += 200;
             updateHUD();
@@ -255,7 +319,7 @@ function initGame() {
     });
   });
 
-  // 自定义 Canvas 渲染
+  // 自定义 Canvas 绘制（轨迹、小鸟、绿猪）
   Events.on(render, 'afterRender', () => {
     const ctx = render.context;
 
@@ -272,7 +336,10 @@ function initGame() {
 }
 
 function spawnBird() {
-  bird = Bodies.circle(slingPos.x, slingPos.y, 18, {
+  // 根据屏幕尺寸等比例调整小鸟尺寸，保证在 PC 和移动端上比例视觉舒适
+  const birdRadius = Math.max(12, Math.min(18, width * 0.015));
+  
+  bird = Bodies.circle(slingPos.x, slingPos.y, birdRadius, {
     density: 0.004,
     frictionAir: 0.005,
     label: 'bird',
@@ -307,129 +374,123 @@ function checkGameStatus() {
   }
 }
 
-// 🗺️ 10 个关卡宏大地图数据
+// 🗺️ 针对不同分辨率大屏/小屏自适应计算的的 10 个关卡地图
 function loadLevel(level) {
   const wood = '#a67c52';
   const stone = '#7f8c8d';
 
-  // 简易工厂函数
   const createWood = (x, y, w, h) => Bodies.rectangle(x, y, w, h, { label: 'wood', render: { fillStyle: wood } });
   const createStone = (x, y, w, h) => Bodies.rectangle(x, y, w, h, { label: 'stone', render: { fillStyle: stone } });
-  const createPig = (x, y, r = 15) => Bodies.circle(x, y, r, { label: 'pig', render: { visible: false } });
+  
+  // 猪的半径根据分辨率做适配
+  const defaultPigR = Math.max(12, Math.min(16, width * 0.014));
+  const createPig = (x, y, r = defaultPigR) => Bodies.circle(x, y, r, { label: 'pig', render: { visible: false } });
 
   const items = [];
+  const baseX = Math.max(width * 0.65, width - 350); // 计算城堡基准位置
+  const baseY = height - 30; // 统一相对地面锚定
 
   if (level === 1) {
-    // 【1. 练习关】简单小屋
-    items.push(createWood(600, 380, 16, 70), createWood(680, 380, 16, 70));
-    items.push(createWood(640, 335, 110, 14));
-    items.push(createPig(640, 370));
-    items.push(createPig(640, 310));
+    items.push(createWood(baseX - 40, baseY - 35, 16, 70), createWood(baseX + 40, baseY - 35, 16, 70));
+    items.push(createWood(baseX, baseY - 75, 110, 14));
+    items.push(createPig(baseX, baseY - 20));
+    items.push(createPig(baseX, baseY - 95));
 
   } else if (level === 2) {
-    // 【2. 连体塔】
-    items.push(createWood(520, 380, 16, 80), createWood(590, 380, 16, 80));
-    items.push(createWood(555, 330, 90, 14));
-    items.push(createPig(555, 360));
+    items.push(createWood(baseX - 80, baseY - 40, 16, 80), createWood(baseX - 10, baseY - 40, 16, 80));
+    items.push(createWood(baseX - 45, baseY - 85, 90, 14));
+    items.push(createPig(baseX - 45, baseY - 20));
 
-    items.push(createWood(670, 380, 16, 100), createWood(740, 380, 16, 100));
-    items.push(createWood(705, 320, 90, 14));
-    items.push(createPig(705, 360), createPig(705, 295));
+    items.push(createWood(baseX + 60, baseY - 50, 16, 100), createWood(baseX + 130, baseY - 50, 16, 100));
+    items.push(createWood(baseX + 95, baseY - 105, 90, 14));
+    items.push(createPig(baseX + 95, baseY - 20), createPig(baseX + 95, baseY - 125));
 
   } else if (level === 3) {
-    // 【3. 石头底座堡垒】
-    items.push(createStone(580, 380, 20, 90), createStone(700, 380, 20, 90));
-    items.push(createWood(640, 325, 150, 16));
-    items.push(createPig(610, 365), createPig(670, 365));
+    items.push(createStone(baseX - 60, baseY - 45, 20, 90), createStone(baseX + 60, baseY - 45, 20, 90));
+    items.push(createWood(baseX, baseY - 95, 150, 16));
+    items.push(createPig(baseX - 30, baseY - 20), createPig(baseX + 30, baseY - 20));
 
-    items.push(createWood(610, 280, 16, 60), createWood(670, 280, 16, 60));
-    items.push(createWood(640, 240, 90, 14));
-    items.push(createPig(640, 215));
+    items.push(createWood(baseX - 30, baseY - 135, 16, 60), createWood(baseX + 30, baseY - 135, 16, 60));
+    items.push(createWood(baseX, baseY - 170, 90, 14));
+    items.push(createPig(baseX, baseY - 190));
 
   } else if (level === 4) {
-    // 【4. 前置防线结构】
-    items.push(createStone(500, 380, 24, 80)); // 盾牌石柱
-    items.push(createWood(600, 380, 16, 80), createWood(680, 380, 16, 80));
-    items.push(createWood(640, 330, 110, 14));
-    items.push(createPig(640, 365));
+    items.push(createStone(baseX - 130, baseY - 40, 24, 80));
+    items.push(createWood(baseX - 40, baseY - 40, 16, 80), createWood(baseX + 40, baseY - 40, 16, 80));
+    items.push(createWood(baseX, baseY - 85, 110, 14));
+    items.push(createPig(baseX, baseY - 20));
 
-    items.push(createStone(640, 280, 20, 80));
-    items.push(createPig(640, 220));
+    items.push(createStone(baseX, baseY - 130, 20, 80));
+    items.push(createPig(baseX, baseY - 180));
 
   } else if (level === 5) {
-    // 【5. 高耸石塔】
-    items.push(createStone(620, 380, 20, 100), createStone(700, 380, 20, 100));
-    items.push(createWood(660, 320, 110, 16));
-    items.push(createPig(660, 360));
+    items.push(createStone(baseX - 40, baseY - 50, 20, 100), createStone(baseX + 40, baseY - 50, 20, 100));
+    items.push(createWood(baseX, baseY - 105, 110, 16));
+    items.push(createPig(baseX, baseY - 20));
 
-    items.push(createStone(630, 260, 18, 80), createStone(690, 260, 18, 80));
-    items.push(createWood(660, 210, 90, 14));
-    items.push(createPig(660, 240));
+    items.push(createStone(baseX - 30, baseY - 150, 18, 80), createStone(baseX + 30, baseY - 150, 18, 80));
+    items.push(createWood(baseX, baseY - 195, 90, 14));
+    items.push(createPig(baseX, baseY - 215));
 
-    items.push(createWood(660, 160, 14, 70));
-    items.push(createPig(660, 110));
+    items.push(createWood(baseX, baseY - 240, 14, 70));
+    items.push(createPig(baseX, baseY - 285));
 
   } else if (level === 6) {
-    // 【6. 地下室与屋顶】
-    items.push(createWood(520, 380, 16, 70), createWood(600, 380, 16, 70), createWood(680, 380, 16, 70));
-    items.push(createStone(600, 335, 190, 16));
-    items.push(createPig(560, 370), createPig(640, 370));
+    items.push(createWood(baseX - 80, baseY - 35, 16, 70), createWood(baseX, baseY - 35, 16, 70), createWood(baseX + 80, baseY - 35, 16, 70));
+    items.push(createStone(baseX, baseY - 75, 190, 16));
+    items.push(createPig(baseX - 40, baseY - 20), createPig(baseX + 40, baseY - 20));
 
-    items.push(createWood(560, 285, 16, 70), createWood(640, 285, 16, 70));
-    items.push(createWood(600, 240, 110, 14));
-    items.push(createPig(600, 215));
+    items.push(createWood(baseX - 40, baseY - 115, 16, 70), createWood(baseX + 40, baseY - 115, 16, 70));
+    items.push(createWood(baseX, baseY - 155, 110, 14));
+    items.push(createPig(baseX, baseY - 175));
 
   } else if (level === 7) {
-    // 【7. 重型交错城堡】
-    items.push(createStone(540, 380, 20, 90), createStone(620, 380, 20, 90), createStone(700, 380, 20, 90));
-    items.push(createWood(620, 325, 200, 16));
-    items.push(createPig(580, 365), createPig(660, 365));
+    items.push(createStone(baseX - 80, baseY - 45, 20, 90), createStone(baseX, baseY - 45, 20, 90), createStone(baseX + 80, baseY - 45, 20, 90));
+    items.push(createWood(baseX, baseY - 95, 200, 16));
+    items.push(createPig(baseX - 40, baseY - 20), createPig(baseX + 40, baseY - 20));
 
-    items.push(createStone(580, 265, 20, 90), createStone(660, 265, 20, 90));
-    items.push(createWood(620, 210, 120, 16));
-    items.push(createPig(620, 250), createPig(620, 185));
+    items.push(createStone(baseX - 40, baseY - 145, 20, 90), createStone(baseX + 40, baseY - 145, 20, 90));
+    items.push(createWood(baseX, baseY - 195, 120, 16));
+    items.push(createPig(baseX, baseY - 120), createPig(baseX, baseY - 215));
 
   } else if (level === 8) {
-    // 【8. 三重掩体堡垒】
-    items.push(createWood(480, 380, 16, 80), createWood(550, 380, 16, 80));
-    items.push(createWood(515, 330, 90, 14));
-    items.push(createPig(515, 365));
+    items.push(createWood(baseX - 120, baseY - 40, 16, 80), createWood(baseX - 60, baseY - 40, 16, 80));
+    items.push(createWood(baseX - 90, baseY - 85, 80, 14));
+    items.push(createPig(baseX - 90, baseY - 20));
 
-    items.push(createStone(600, 380, 20, 100), createStone(670, 380, 20, 100));
-    items.push(createWood(635, 320, 90, 14));
-    items.push(createPig(635, 365), createPig(635, 295));
+    items.push(createStone(baseX - 10, baseY - 50, 20, 100), createStone(baseX + 50, baseY - 50, 20, 100));
+    items.push(createWood(baseX + 20, baseY - 105, 90, 14));
+    items.push(createPig(baseX + 20, baseY - 20), createPig(baseX + 20, baseY - 125));
 
-    items.push(createWood(720, 380, 16, 80), createWood(780, 380, 16, 80));
-    items.push(createWood(750, 330, 80, 14));
-    items.push(createPig(750, 365));
+    items.push(createWood(baseX + 100, baseY - 40, 16, 80), createWood(baseX + 160, baseY - 40, 16, 80));
+    items.push(createWood(baseX + 130, baseY - 85, 80, 14));
+    items.push(createPig(baseX + 130, baseY - 20));
 
   } else if (level === 9) {
-    // 【9. 巨型金字塔】
-    items.push(createWood(500, 380, 16, 70), createWood(580, 380, 16, 70), createWood(660, 380, 16, 70), createWood(740, 380, 16, 70));
-    items.push(createStone(620, 335, 270, 16));
-    items.push(createPig(540, 370), createPig(620, 370), createPig(700, 370));
+    items.push(createWood(baseX - 120, baseY - 35, 16, 70), createWood(baseX - 40, baseY - 35, 16, 70), createWood(baseX + 40, baseY - 35, 16, 70), createWood(baseX + 120, baseY - 35, 16, 70));
+    items.push(createStone(baseX, baseY - 75, 270, 16));
+    items.push(createPig(baseX - 80, baseY - 20), createPig(baseX, baseY - 20), createPig(baseX + 80, baseY - 20));
 
-    items.push(createWood(540, 285, 16, 70), createWood(620, 285, 16, 70), createWood(700, 285, 16, 70));
-    items.push(createStone(620, 240, 190, 16));
-    items.push(createPig(580, 275), createPig(660, 275));
+    items.push(createWood(baseX - 80, baseY - 115, 16, 70), createWood(baseX, baseY - 115, 16, 70), createWood(baseX + 80, baseY - 115, 16, 70));
+    items.push(createStone(baseX, baseY - 155, 190, 16));
+    items.push(createPig(baseX - 40, baseY - 100), createPig(baseX + 40, baseY - 100));
 
-    items.push(createWood(580, 190, 16, 70), createWood(660, 190, 16, 70));
-    items.push(createWood(620, 145, 110, 14));
-    items.push(createPig(620, 120));
+    items.push(createWood(baseX - 40, baseY - 195, 16, 70), createWood(baseX + 40, baseY - 195, 16, 70));
+    items.push(createWood(baseX, baseY - 235, 110, 14));
+    items.push(createPig(baseX, baseY - 255));
 
   } else if (level === 10) {
-    // 【10. 终极Boss猪的要塞】
-    items.push(createStone(480, 380, 25, 100), createStone(560, 380, 25, 100), createStone(640, 380, 25, 100), createStone(720, 380, 25, 100));
-    items.push(createWood(600, 320, 280, 18));
-    items.push(createPig(520, 360, 16), createPig(600, 360, 20), createPig(680, 360, 16)); // 中间大Boss猪
+    items.push(createStone(baseX - 120, baseY - 50, 25, 100), createStone(baseX - 40, baseY - 50, 25, 100), createStone(baseX + 40, baseY - 50, 25, 100), createStone(baseX + 120, baseY - 50, 25, 100));
+    items.push(createWood(baseX, baseY - 105, 280, 18));
+    items.push(createPig(baseX - 80, baseY - 20, 14), createPig(baseX, baseY - 20, 18), createPig(baseX + 80, baseY - 20, 14));
 
-    items.push(createStone(520, 250, 20, 100), createStone(680, 250, 20, 100));
-    items.push(createWood(600, 190, 190, 16));
-    items.push(createPig(600, 230, 16));
+    items.push(createStone(baseX - 80, baseY - 160, 20, 100), createStone(baseX + 80, baseY - 160, 20, 100));
+    items.push(createWood(baseX, baseY - 215, 190, 16));
+    items.push(createPig(baseX, baseY - 130, 15));
 
-    items.push(createWood(560, 130, 16, 80), createWood(640, 130, 16, 80));
-    items.push(createStone(600, 80, 110, 16));
-    items.push(createPig(600, 50, 14));
+    items.push(createWood(baseX - 40, baseY - 260, 16, 80), createWood(baseX + 40, baseY - 260, 16, 80));
+    items.push(createStone(baseX, baseY - 305, 110, 16));
+    items.push(createPig(baseX, baseY - 325, 14));
   }
 
   Composite.add(engine.world, items);
@@ -592,6 +653,30 @@ function handleModalClick() {
 function resetCurrentLevel() {
   initGame();
 }
+
+// ⌨️ PC 端键盘快捷键绑定
+window.addEventListener('keydown', (e) => {
+  // 按 R 键快捷重置关卡
+  if (e.key === 'r' || e.key === 'R') {
+    resetCurrentLevel();
+  }
+  // 按 Enter 或 Space 键关闭/响应弹窗
+  if (e.key === 'Enter' || e.key === ' ') {
+    const modal = document.getElementById('modal');
+    if (modal.classList.contains('show')) {
+      handleModalClick();
+    }
+  }
+});
+
+// 窗口尺寸改变/旋转屏幕时自动重置
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    resetCurrentLevel();
+  }, 200);
+});
 
 window.onload = initGame;
 </script>
